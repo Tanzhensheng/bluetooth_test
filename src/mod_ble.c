@@ -5,11 +5,38 @@
 #include "proto_codec.h"
 #include "proto_session.h"
 
+#include <stdio.h>
 #include <string.h>
 
 static ble_client_context_t g_client;
 static proto_session_t g_session;
+static mod_ble_config_t g_config;
 static int g_is_open = 0;
+
+void mod_ble_config_init(mod_ble_config_t *config)
+{
+    if (config == NULL) {
+        return;
+    }
+
+    (void)memset(config, 0, sizeof(*config));
+    config->scan_timeout_ms = 5000;
+    config->recv_timeout_ms = 3000;
+    config->mode = MOD_BLE_MODE_FULL;
+}
+
+int mod_ble_configure(const mod_ble_config_t *config)
+{
+    if (config == NULL) {
+        return MOD_BLE_STATUS_INVALID_ARG;
+    }
+    if (g_is_open) {
+        return MOD_BLE_STATUS_STATE;
+    }
+
+    g_config = *config;
+    return MOD_BLE_STATUS_OK;
+}
 
 int mod_ble_open(const char *target_id)
 {
@@ -19,7 +46,12 @@ int mod_ble_open(const char *target_id)
         return MOD_BLE_STATUS_STATE;
     }
 
-    status = ble_client_open(&g_client, target_id);
+    g_client.config = g_config;
+    if (target_id != NULL && target_id[0] != '\0') {
+        (void)snprintf(g_client.config.target_id, sizeof(g_client.config.target_id), "%s", target_id);
+    }
+
+    status = ble_client_open(&g_client);
     if (status != MOD_BLE_STATUS_OK) {
         return status;
     }

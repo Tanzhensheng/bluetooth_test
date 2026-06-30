@@ -5,6 +5,7 @@
 #include <stdint.h>
 
 #define MOD_BLE_MAX_TARGET_ID_LEN 64U
+#define MOD_BLE_MAX_UUID_LEN 40U
 #define MOD_BLE_MAX_FRAME_DATA_LEN 160U
 #define MOD_BLE_MAX_HEX_DUMP_LEN 1024U
 
@@ -23,15 +24,29 @@ typedef enum {
     MOD_BLE_PROTO_NEAR_FIELD = 0x10
 } mod_ble_proto_t;
 
+typedef enum {
+    MOD_BLE_MODE_FULL = 0,
+    MOD_BLE_MODE_DISCOVER_ONLY = 1,
+    MOD_BLE_MODE_SCAN_ONLY = 2
+} mod_ble_mode_t;
+
 typedef struct {
-    char service_uuid[40];
-    char write_char_uuid[40];
-    char notify_char_uuid[40];
+    char service_uuid[MOD_BLE_MAX_UUID_LEN];
+    char write_char_uuid[MOD_BLE_MAX_UUID_LEN];
+    char notify_char_uuid[MOD_BLE_MAX_UUID_LEN];
 } ble_gatt_placeholders_t;
 
 typedef struct {
     char target_id[MOD_BLE_MAX_TARGET_ID_LEN];
     ble_gatt_placeholders_t gatt;
+    int scan_timeout_ms;
+    int recv_timeout_ms;
+    mod_ble_mode_t mode;
+    int verbose;
+} mod_ble_config_t;
+
+typedef struct {
+    mod_ble_config_t config;
     int is_connected;
 } ble_client_context_t;
 

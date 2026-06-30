@@ -1,5 +1,6 @@
 #include "mod_ble.h"
 #include "mod_ble_log.h"
+#include "demo_cli.h"
 
 #include <stdio.h>
 #include <stdlib.h>
@@ -17,69 +18,60 @@ static size_t fill_default_payload(uint8_t *buf, size_t buf_size)
     return sizeof(sample);
 }
 
-static int parse_hex_bytes(int argc, char **argv, int start_index, uint8_t *buf, size_t buf_size, size_t *out_len)
-{
-    int i;
-    size_t len = 0U;
-
-    for (i = start_index; i < argc; ++i) {
-        char *end = NULL;
-        unsigned long value;
-
-        if (len >= buf_size) {
-            return MOD_BLE_STATUS_INVALID_ARG;
-        }
-
-        value = strtoul(argv[i], &end, 16);
-        if (end == argv[i] || *end != '\0' || value > 0xFFUL) {
-            return MOD_BLE_STATUS_INVALID_ARG;
-        }
-
-        buf[len++] = (uint8_t)value;
-    }
-
-    *out_len = len;
-    return MOD_BLE_STATUS_OK;
-}
-
 int main(int argc, char **argv)
 {
-    const char *target_id = "demo-target";
-    uint8_t tx_buf[MOD_BLE_MAX_FRAME_DATA_LEN];
+    demo_cli_options_t options;
     uint8_t rx_buf[MOD_BLE_MAX_FRAME_DATA_LEN];
-    size_t tx_len = 0U;
     int status;
     int rx_len;
 
-    if (argc >= 3 && strcmp(argv[1], "--target") == 0) {
-        target_id = argv[2];
-        if (argc > 3) {
-            status = parse_hex_bytes(argc, argv, 3, tx_buf, sizeof(tx_buf), &tx_len);
-            if (status != MOD_BLE_STATUS_OK) {
-                mod_ble_log_error("invalid hex payload");
-                return EXIT_FAILURE;
-            }
-        }
+    demo_cli_options_init(&options);
+    status = demo_cli_parse(argc, argv, &options);
+    if (status == MOD_BLE_STATUS_UNSUPPORTED) {
+        demo_cli_print_usage(argv[0]);
+        return EXIT_SUCCESS;
+    }
+    if (status != MOD_BLE_STATUS_OK) {
+        mod_ble_log_error("invalid arguments");
+        demo_cli_print_usage(argv[0]);
+        return EXIT_FAILURE;
     }
 
-    if (tx_len == 0U) {
-        tx_len = fill_default_payload(tx_buf, sizeof(tx_buf));
+    if (options.payload_len == 0U) {
+        options.payload_len = fill_default_payload(options.payload, sizeof(options.payload));
     }
 
-    status = mod_ble_open(target_id);
+    if (options.config.target_id[0] == '\0') {
+        mod_ble_log_error("target is required");
+        return EXIT_FAILURE;
+    }
+
+    status = mod_ble_configure(&options.config);
+    if (status != MOD_BLE_STATUS_OK) {
+        mod_ble_log_error("mod_ble_configure failed: %d", status);
+        return EXIT_FAILURE;
+    }
+
+    status = mod_ble_open(options.config.target_id);
     if (status != MOD_BLE_STATUS_OK) {
         mod_ble_log_error("mod_ble_open failed: %d", status);
         return EXIT_FAILURE;
     }
 
-    status = mod_ble_send(tx_buf, tx_len, MOD_BLE_PROTO_NEAR_FIELD);
+    if (options.config.mode != MOD_BLE_MODE_FULL) {
+        mod_ble_log_info("demo completed in non-full mode");
+        mod_ble_close();
+        return EXIT_SUCCESS;
+    }
+
+    status = mod_ble_send(options.payload, options.payload_len, MOD_BLE_PROTO_NEAR_FIELD);
     if (status != MOD_BLE_STATUS_OK) {
         mod_ble_log_error("mod_ble_send failed: %d", status);
         mod_ble_close();
         return EXIT_FAILURE;
     }
 
-    rx_len = mod_ble_recv(rx_buf, sizeof(rx_buf), 3000);
+    rx_len = mod_ble_recv(rx_buf, sizeof(rx_buf), options.config.recv_timeout_ms);
     if (rx_len < 0) {
         mod_ble_log_error("mod_ble_recv failed: %d", rx_len);
         mod_ble_close();

@@ -6,8 +6,8 @@
 
 - 对外接口固定为 socket 风格：`open/send/recv/close`
 - 协议层预留 `A5/L/C/PSEQ/FSEQ/PROT/DATA/CS/96` 的编解码和会话状态机
-- BLE 传输层先保留 BlueZ D-Bus 接入点，不依赖现有 `project001`
-- GATT 的 `Service UUID / Characteristic UUID / 写入方式 / Notify 方式` 先留空
+- BLE 传输层在 Linux 下优先走 BlueZ D-Bus；其他平台回退为 stub
+- GATT 的 `Service UUID / Characteristic UUID / 写入方式 / Notify 方式` 仍允许先留空
 
 ## 目录结构
 
@@ -19,8 +19,10 @@ include/
   ble_client.h
   proto_codec.h
   proto_session.h
+  demo_cli.h
 src/
   main.c
+  demo_cli.c
   mod_ble_log.c
   ble_client.c
   proto_codec.c
@@ -49,6 +51,14 @@ cmake -S . -B build
 cmake --build build
 ```
 
+Linux 上如果要启用真实 BlueZ D-Bus 路径，需要准备：
+
+```bash
+sudo apt-get install -y libglib2.0-dev pkg-config
+```
+
+如果缺少 `glib-2.0/gio-2.0`，构建会自动回退到 stub 传输层。
+
 如果目标环境暂时没有 `cmake`，可以直接用 `gcc` 验证当前骨架：
 
 ```bash
@@ -61,7 +71,20 @@ gcc -std=c11 -Wall -Wextra -Wpedantic -I include \
 ## 运行
 
 ```bash
-./build/mod_ble_demo --target demo-target --hex A5 00 01
+./build/mod_ble_demo --target demo-target --discover-only
 ```
 
-当前 demo 只验证骨架、日志和 API 连线，BlueZ GATT 细节仍是占位实现。
+```bash
+./build/mod_ble_demo \
+  --target demo-target \
+  --service-uuid 12345678-1234-5678-1234-56789abcdef0 \
+  --write-char-uuid 11111111-2222-3333-4444-555555555555 \
+  --notify-char-uuid aaaaaaaa-bbbb-cccc-dddd-eeeeeeeeeeee \
+  01 02 03
+```
+
+当前建议的 VM 验证顺序：
+
+1. 先跑 `--discover-only`，确认目标设备能被找到、连接，并打印 service/characteristic
+2. 拿到真实 UUID 后，再补 `--service-uuid/--write-char-uuid/--notify-char-uuid`
+3. 最后再验证发送和通知接收
